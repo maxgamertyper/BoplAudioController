@@ -16,7 +16,7 @@ using System.Linq;
 
 namespace AudioController
 {
-    [BepInPlugin("com.maxgamertyper1.audiocontroller", "Audio Controller", "1.0.0")]
+    [BepInPlugin("com.maxgamertyper1.audiocontroller", "Audio Controller", "1.0.1")]
     public class AudioController : BaseUnityPlugin
     {
         public static string CustomSongsPath = Path.Combine(Paths.ConfigPath, "CustomSongs");
@@ -169,14 +169,12 @@ namespace AudioController
     public class Patches
     {
         public static AudioManager AudioManager;
-        public static bool CurrentlyPaused = true;
         public static bool SliderActive = false;
         public static GameObject SliderObject;
         public static TextMeshProUGUI SongText;
         public static TextMeshProUGUI VolumeText;
         public static TextMeshProUGUI ShuffleText;
         public static Image PauseButtonImage;
-        public static Image ShuffleButtonImage;
         public static bool? ShuffleButtonState;
         public static List<AudioClip> CustomSongs = new List<AudioClip>();
         public static bool HasLoadedSongs = false;
@@ -214,7 +212,7 @@ namespace AudioController
         {
             AudioManager.musicPlayer.loop = false;
             AudioManager.introMusicPlayer.loop = false;
-            if (!CurrentlyPaused) { PauseButtonClicked(); }
+            if (!IsPaused) { PauseButtonClicked(); }
             if (ShuffleButtonState == null)  // normal shuffle
             {
                 CurrentIndex++;
@@ -254,7 +252,7 @@ namespace AudioController
         public static void PrevButtonClicked()
         {
             
-            if (!CurrentlyPaused) { PauseButtonClicked(); }
+            if (!IsPaused) { PauseButtonClicked(); }
             if (ShuffleButtonState == null)  // normal shuffle
             {
                 CurrentIndex--;
@@ -337,7 +335,7 @@ namespace AudioController
         public static void PauseButtonClicked()
         {
             IsPaused = !IsPaused;
-            if (CurrentlyPaused)
+            if (IsPaused)
             {
                 AudioManager.PauseMusic();
                 Texture2D PlayTexture = AudioController.GetTextureFromPng("play.png");
@@ -352,7 +350,6 @@ namespace AudioController
                 PauseSprite.name = "pause.png";
                 PauseButtonImage.sprite = PauseSprite;
             }
-            CurrentlyPaused = !CurrentlyPaused;
         }
         public static void ShuffleButtonClicked()
         {
@@ -378,7 +375,6 @@ namespace AudioController
                 ShuffleText.text = "None";
                 ShuffleButtonState = null;
             }
-            CurrentlyPaused = !CurrentlyPaused;
         }
         public static GameObject CreateGameObject(string name,Vector3 localposition, List<Type> extratypes)
         {
@@ -429,6 +425,11 @@ namespace AudioController
             GameObject RadioFolder = CreateGameObject("RadioFolder", new Vector3(-810, -390, 0), null);
             RadioFolder.GetComponent<RectTransform>().SetParent(canvas.transform, false);
 
+            if (!IsOpened)
+            {
+                RadioFolder.SetActive(false);
+            }
+
             // make the background
             GameObject RadioBackground = CreateGameObject("RadioBackground", new Vector3(156, 31, 0), [typeof(CanvasRenderer), typeof(Image)]);
             RadioBackground.GetComponent<RectTransform>().SetParent(RadioFolder.transform, false);
@@ -472,7 +473,9 @@ namespace AudioController
             GameObject PauseButton = CreateGameObject("PauseButton", new Vector3(100, 0, 0), new List<Type>([typeof(CanvasRenderer), typeof(Image), typeof(Button)]));
             PauseButton.GetComponent<RectTransform>().SetParent(RadioFolder.transform, false);
 
-            AddImageInformation(PauseButton, new Vector2(100, 100), Vector3.one, "pause.png");
+            string imagefile = !IsPaused ? "pause.png" : "play.png";
+
+            AddImageInformation(PauseButton, new Vector2(100, 100), Vector3.one, imagefile);
 
             Button PauseButtonActual = PauseButton.GetComponent<Button>();
             PauseButtonActual.onClick.AddListener(() => PauseButtonClicked());
@@ -499,7 +502,6 @@ namespace AudioController
             Button ShuffleButtonActual = ShuffleButton.GetComponent<Button>();
             ShuffleButtonActual.onClick.AddListener(() => ShuffleButtonClicked());
 
-            ShuffleButtonImage = ShuffleButton.GetComponent<Image>();
 
 
             // make loop button
@@ -525,12 +527,25 @@ namespace AudioController
 
             Patches.ShuffleText = AddTextInformation(ShuffleText, new Vector3(350, 50, 0), "None");
 
+            if (ShuffleButtonState == null)
+            { // normal
+                Patches.ShuffleText.text = "None";
+            }
+            else if (ShuffleButtonState == true)
+            { // queue shuffle
+                Patches.ShuffleText.text = "Queue";
+            }
+            else
+            { // random shuffle
+                Patches.ShuffleText.text = "Random";
+            }
+
             // make loop text
             GameObject LoopText = CreateGameObject("LoopText", new Vector3(410, -50, 0), new List<Type>([typeof(TextMeshProUGUI)]));
             LoopText.GetComponent<RectTransform>().SetParent(RadioFolder.transform, false);
 
             Patches.LoopText = AddTextInformation(LoopText, new Vector3(350, 50, 0), "True");
-
+            Patches.LoopText.text = Looping ? "True" : "False";
 
             // make song text
             GameObject SongText = CreateGameObject("SongText", new Vector3(150, 57, 0), new List<Type>([typeof(TextMeshProUGUI)]));
@@ -641,6 +656,7 @@ namespace AudioController
 
         public static void OnMatchStartedPrefix(ref AudioManager __instance)
         {
+            IsPaused = false;
             CreateUIElements();
             AudioManager = AudioManager.Get();
             if (HasLoadedSongs) { return; }
